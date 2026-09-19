@@ -2,3 +2,5 @@ build/
 site/public/
 /BreakReminder
 .DS_Store
+windows/bin/
+windows/obj/

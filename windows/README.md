@@ -1,0 +1,27 @@
+# BreakReminder Windows 版
+
+连续工作满 1 小时 → 弹窗提示 → 播放**系统屏保** 5 分钟 → 恢复正常。
+托盘常驻 ☕ 图标，行为与 macOS 版一致。
+
+## 使用（最简单）
+
+拿到 `BreakReminder.exe`（约 20 KB，单文件）直接双击运行，托盘出现 ☕ 图标即完成：
+
+- 右键托盘图标：查看进度 / 立即休息 / 重新计时 / 暂停监控 / 设置 / 开机自启 / 退出
+- 播放的屏保 = Windows「设置 → 个性化 → 锁屏界面 → 屏幕保护程序」里当前选中的那款
+  （若未设置过，用系统自带的空白屏保 scrnsave.scr）
+- 设置存于 `%APPDATA%\BreakReminder.ini`，日志在 `%LOCALAPPDATA%\BreakReminder\log.txt`
+
+要求：Windows 10 / 11（.NET Framework 4.8 系统自带，无需安装任何运行时）。
+若 SmartScreen 拦截：点「更多信息 → 仍要运行」。
+
+## 从源码编译
+
+把本目录（`Program.cs` + `build.bat`）拷到 Windows 上，双击 `build.bat`，
+用系统自带编译器生成 `BreakReminder.exe`，同样零依赖。
+
+## 与 macOS 版的差异
+
+Windows 上屏保是普通进程，可以**直接启动/关闭**：休息到点程序自己关闭屏保
+立即恢复桌面；休息中屏保被键鼠关掉会自动重新拉起，累计 3 次放行
+（`设置` 里可调）。其余规则相同：空闲 ≥ 5 分钟视为已休息、累计清零。

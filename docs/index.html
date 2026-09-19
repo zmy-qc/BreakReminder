@@ -45,8 +45,10 @@
   <div class="logo">休</div>
   <h1>BreakReminder 休息提醒</h1>
   <p class="tag">连续工作满一小时，自动提醒并播放系统屏保五分钟</p>
-  <a class="btn" href="./BreakReminder.zip" download>⬇︎ 下载 macOS 版</a>
-  <div class="meta">v1.0.0 · macOS 13+ · Apple Silicon / Intel 通用 · 纯本地运行，无遥测</div>
+  <a class="btn" href="./BreakReminder-macOS.zip" download>⬇︎ 下载 macOS 版</a>
+  &nbsp;
+  <a class="btn" href="./BreakReminder-Windows.zip" download>⬇︎ 下载 Windows 版</a>
+  <div class="meta">v1.0.0 · macOS 13+ / Windows 10+ · Apple Silicon / Intel 通用 · 纯本地运行，无遥测</div>
 </div>
 <main>
   <div class="card">
@@ -55,25 +57,35 @@
       <div class="feat"><b>⏱ 连续工作计时</b><span>按键鼠活动累计；离开超过 5 分钟视为已休息，回来重新计时</span></div>
       <div class="feat"><b>🔔 一小时提醒</b><span>弹窗提示 + 提示音，30 秒无响应自动开始休息</span></div>
       <div class="feat"><b>🌊 屏保休息五分钟</b><span>播放系统自带屏保动画，中途关掉会自动回来，满 5 分钟结束</span></div>
-      <div class="feat"><b>☕ 菜单栏常驻</b><span>随时看进度、立即休息、暂停监控、调整参数、开关开机自启</span></div>
+      <div class="feat"><b>☕ 菜单栏/托盘常驻</b><span>随时看进度、立即休息、暂停监控、调整参数、开关开机自启</span></div>
     </div>
   </div>
   <div class="card">
-    <h2>安装（3 步）</h2>
+    <h2>安装 — macOS（3 步）</h2>
     <ol>
-      <li>点击上方按钮下载 <code>BreakReminder.zip</code> 并解压，得到 <code>BreakReminder.app</code>；</li>
+      <li>下载 <code>BreakReminder-macOS.zip</code> 并解压，得到 <code>BreakReminder.app</code>；</li>
       <li>拖入「应用程序」文件夹，<b>右键 → 打开 → 打开</b>（自用软件无开发者签名，首次绕过一次即可）；</li>
       <li>菜单栏出现 ☕ 图标即完成，已自动设置开机自启。</li>
     </ol>
     <p class="muted">若 macOS 提示「已损坏，无法打开」（新系统对未签名下载软件的限制），在终端执行后再打开：</p>
     <pre><code>xattr -cr /Applications/BreakReminder.app</code></pre>
-    <p class="muted">SHA-256 校验：<code class="sha">17c6387ce7202474888f08d6116a8fbc0d14fa5af18b8c160f099e3925610885</code></p>
+    <p class="muted">SHA-256 校验：<code class="sha">09992f98151fa9e867878130092b5ef6e393d7015632298ed2710eeb9b733308</code></p>
+  </div>
+  <div class="card">
+    <h2>安装 — Windows（1 步）</h2>
+    <ol>
+      <li>下载 <code>BreakReminder-Windows.zip</code> 并解压，双击 <code>BreakReminder.exe</code>，
+      托盘（右下角）出现 ☕ 图标即运行。单文件约 20 KB，无需安装任何运行时
+      （Win10/11 自带 .NET Framework）。首次运行若被 SmartScreen 拦截：
+      「更多信息 → 仍要运行」。右键托盘图标可开启开机自启。</li>
+    </ol>
+    <p class="muted">SHA-256 校验：<code class="sha-win">075f002cb652cdb34585c6fe45f3f33e1f9b29db368db292b3bef8819ad0a1fb</code></p>
   </div>
   <div class="card">
     <h2>休息的规则</h2>
     <p class="muted">休息期间播放的系统屏保只能被键鼠输入关掉——中途动键鼠屏保会立刻被拉回，累计 3 次后放行（防止有急事被锁死）。休息时间结束不再拉屏保：人在座，动一下键鼠即恢复；人不在座，屏保保持，回来一碰即消失，与系统空闲屏保行为一致。软件完全离线运行，不联网、不收集任何数据。</p>
   </div>
 </main>
-<footer>个人自用小工具 · 无遥测 · macOS 13+</footer>
+<footer>个人自用小工具 · 无遥测 · macOS 13+ / Windows 10+</footer>
 </body>
 </html>

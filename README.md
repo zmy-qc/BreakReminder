@@ -1,8 +1,15 @@
-# BreakReminder — 每小时强制休息 5 分钟（macOS 菜单栏应用）
+# BreakReminder — 每小时强制休息 5 分钟（macOS + Windows）
 
 连续工作满 1 小时 → 弹窗提示「连续工作一小时，请休息一下」→ 播放系统自带屏保
-5 分钟 → 结束休息、重新计时。**通用二进制（arm64 + x86_64），整个 .app 拷到
-其他 Mac 即可用。**
+5 分钟 → 结束休息、重新计时。macOS 版为菜单栏 App（通用二进制，拷到其他 Mac
+直接用）；Windows 版为单文件 exe（约 20 KB，Win10/11 自带运行时，零依赖）。
+
+## Windows 版
+
+见 `windows/`：`Program.cs`（C# WinForms，.NET Framework 4.8）+ `build.bat`。
+在 Windows 上双击 `build.bat` 用系统自带编译器即可重新生成 exe；或直接使用
+发布包里的 `BreakReminder-Windows.zip`。行为与 macOS 版一致，差异：Windows
+上屏保是普通进程，休息到点程序直接关闭屏保恢复桌面（不必等键鼠输入）。
 
 ## 日常使用
 
@@ -49,7 +56,7 @@ bash install.sh      # 构建并装到 /Applications, 启动
 bash uninstall.sh    # 卸载
 ```
 
-Windows 版暂未适配（当前仅 macOS）。
+
 
 ## 发布到自有网站（可选）
 
