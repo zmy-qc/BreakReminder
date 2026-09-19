@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BreakReminder 休息提醒 — 下载</title>
+<meta name="description" content="连续工作满一小时，自动提醒并播放系统屏保五分钟。macOS 菜单栏自用小工具。">
+<style>
+  :root { --blue: #3a8cf7; --deep: #1253cc; --text: #1d2733; --muted: #5b6b7d; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+         color: var(--text); background: #f5f8fc; line-height: 1.7; }
+  .hero { background: linear-gradient(135deg, var(--blue), var(--deep)); color: #fff;
+          padding: 72px 24px 72px; text-align: center; }
+  .hero .logo { width: 96px; height: 96px; border-radius: 22px; background: rgba(255,255,255,.16);
+                display: inline-flex; align-items: center; justify-content: center;
+                font-size: 52px; font-weight: 700; margin-bottom: 20px; }
+  h1 { font-size: 34px; margin-bottom: 8px; letter-spacing: .5px; }
+  .hero p.tag { opacity: .92; font-size: 17px; }
+  .btn { display: inline-block; margin-top: 30px; background: #fff; color: var(--deep);
+         font-size: 18px; font-weight: 600; padding: 14px 46px; border-radius: 12px;
+         text-decoration: none; box-shadow: 0 8px 24px rgba(0,0,0,.18); transition: transform .15s; }
+  .btn:hover { transform: translateY(-2px); }
+  .meta { margin-top: 16px; font-size: 13px; opacity: .85; }
+  main { max-width: 880px; margin: -32px auto 60px; padding: 0 20px; }
+  .card { background: #fff; border-radius: 16px; padding: 32px; margin-bottom: 24px;
+          box-shadow: 0 4px 20px rgba(18,83,204,.08); }
+  h2 { font-size: 20px; margin-bottom: 16px; color: var(--deep); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
+  .feat { background: #f7faff; border: 1px solid #e3edfb; border-radius: 12px; padding: 16px; }
+  .feat b { display: block; margin-bottom: 4px; font-size: 15px; }
+  .feat span { font-size: 14px; color: var(--muted); }
+  ol li { margin: 10px 0; }
+  code { background: #eef3fb; color: #c7254e; padding: 2px 8px; border-radius: 6px;
+         font-size: 14px; font-family: ui-monospace, Menlo, monospace; }
+  pre { background: #1d2733; color: #e6edf3; border-radius: 10px; padding: 14px 18px;
+        overflow-x: auto; margin-top: 10px; font-size: 14px; }
+  pre code { background: none; color: inherit; padding: 0; }
+  .muted { color: var(--muted); font-size: 14px; margin-top: 8px; }
+  footer { text-align: center; padding: 30px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="hero">
+  <div class="logo">休</div>
+  <h1>BreakReminder 休息提醒</h1>
+  <p class="tag">连续工作满一小时，自动提醒并播放系统屏保五分钟</p>
+  <a class="btn" href="./BreakReminder.zip" download>⬇︎ 下载 macOS 版</a>
+  <div class="meta">v1.0.0 · macOS 13+ · Apple Silicon / Intel 通用 · 纯本地运行，无遥测</div>
+</div>
+<main>
+  <div class="card">
+    <h2>它做什么</h2>
+    <div class="grid">
+      <div class="feat"><b>⏱ 连续工作计时</b><span>按键鼠活动累计；离开超过 5 分钟视为已休息，回来重新计时</span></div>
+      <div class="feat"><b>🔔 一小时提醒</b><span>弹窗提示 + 提示音，30 秒无响应自动开始休息</span></div>
+      <div class="feat"><b>🌊 屏保休息五分钟</b><span>播放系统自带屏保动画，中途关掉会自动回来，满 5 分钟结束</span></div>
+      <div class="feat"><b>☕ 菜单栏常驻</b><span>随时看进度、立即休息、暂停监控、调整参数、开关开机自启</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>安装（3 步）</h2>
+    <ol>
+      <li>点击上方按钮下载 <code>BreakReminder.zip</code> 并解压，得到 <code>BreakReminder.app</code>；</li>
+      <li>拖入「应用程序」文件夹，<b>右键 → 打开 → 打开</b>（自用软件无开发者签名，首次绕过一次即可）；</li>
+      <li>菜单栏出现 ☕ 图标即完成，已自动设置开机自启。</li>
+    </ol>
+    <p class="muted">若 macOS 提示「已损坏，无法打开」（新系统对未签名下载软件的限制），在终端执行后再打开：</p>
+    <pre><code>xattr -cr /Applications/BreakReminder.app</code></pre>
+    <p class="muted">SHA-256 校验：<code class="sha">e1571db298812a4e73cd01a9c1c0b8dc3385659f368fe83d3d5f55fcfab427be</code></p>
+  </div>
+  <div class="card">
+    <h2>休息的规则</h2>
+    <p class="muted">休息期间播放的系统屏保只能被键鼠输入关掉——中途动键鼠屏保会立刻被拉回，累计 3 次后放行（防止有急事被锁死）。休息时间结束不再拉屏保：人在座，动一下键鼠即恢复；人不在座，屏保保持，回来一碰即消失，与系统空闲屏保行为一致。软件完全离线运行，不联网、不收集任何数据。</p>
+  </div>
+</main>
+<footer>个人自用小工具 · 无遥测 · macOS 13+</footer>
+</body>
+</html>
