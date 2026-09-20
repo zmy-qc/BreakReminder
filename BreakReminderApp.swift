@@ -142,11 +142,12 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     var onClose: () -> Void = {}
     private var numberFields: [String: NSTextField] = [:]
     private var soundCheck: NSButton!
+    private var builtinCheck: NSButton!
 
     init(config: Config, onSave: @escaping () -> Void) {
         self.onSave = onSave
         let win = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 380, height: 300),
+            contentRect: NSRect(x: 0, y: 0, width: 380, height: 344),
             styleMask: [.titled, .closable],
             backing: .buffered, defer: false)
         win.title = "BreakReminder 设置"
@@ -185,11 +186,15 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         soundCheck = NSButton(checkboxWithTitle: "触发时播放提示音", target: nil, action: nil)
         soundCheck.state = config.sound ? .on : .off
 
+        let d0 = UserDefaults.standard
+        builtinCheck = NSButton(checkboxWithTitle: "使用内置休息画面（全屏动画 + 倒计时）", target: nil, action: nil)
+        builtinCheck.state = (d0.object(forKey: "builtinRestScreen") == nil ? true : d0.bool(forKey: "builtinRestScreen")) ? .on : .off
+
         let save = NSButton(title: "保存", target: self, action: #selector(save))
         save.bezelStyle = .rounded
         save.keyEquivalent = "\r"
 
-        let box = NSStackView(views: [grid, soundCheck, save])
+        let box = NSStackView(views: [grid, soundCheck, builtinCheck, save])
         box.orientation = .vertical
         box.spacing = 18
         box.translatesAutoresizingMaskIntoConstraints = false
@@ -215,6 +220,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         clamp("idleResetMin", 1, 120)
         clamp("dialogTimeoutSec", 3, 300)
         d.set(soundCheck.state == .on, forKey: "soundOn")
+        d.set(builtinCheck.state == .on, forKey: "builtinRestScreen")
         onSave()
         log("设置已保存")
         window?.close()
@@ -413,6 +419,171 @@ final class BreakOverlayPanel: NSPanel {
     override var canBecomeKey: Bool { false }
 }
 
+// MARK: - 内置休息画面 (全屏深蓝渐变 + 漂浮光斑 + 居中大倒计时, 自有窗口不会被系统屏保遮挡)
+
+final class RestWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
+final class RestScreenController {
+    private var windows: [NSWindow] = []
+    private var timer: Timer?
+    private var endTime: Date
+    private var bigLabel: NSTextField?
+    private static var glowCache: [NSColor: NSImage] = [:]
+
+    init(breakSeconds: Double) {
+        endTime = Date().addingTimeInterval(breakSeconds)
+
+        // 倒计时放在鼠标所在屏, 其余屏只有氛围背景
+        let mouse = NSEvent.mouseLocation
+        var countdownScreen = NSScreen.main
+        for s in NSScreen.screens where NSMouseInRect(mouse, s.frame, false) { countdownScreen = s; break }
+
+        for screen in NSScreen.screens {
+            let f = screen.frame
+            let w = RestWindow(contentRect: f, styleMask: [.borderless], backing: .buffered, defer: false)
+            w.level = .screenSaver
+            w.backgroundColor = .black
+            w.isOpaque = true
+            w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            w.contentView = makeContent(frame: f, withCountdown: screen == countdownScreen)
+            if screen == countdownScreen {
+                w.makeKeyAndOrderFront(nil)
+            } else {
+                w.orderFrontRegardless()
+            }
+            windows.append(w)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+
+        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.tick() }
+        RunLoop.main.add(timer!, forMode: .common)
+        tick()
+    }
+
+    private func makeContent(frame: NSRect, withCountdown: Bool) -> NSView {
+        let v = NSView(frame: frame)
+        v.wantsLayer = true
+
+        let bg = CAGradientLayer()
+        bg.frame = v.bounds
+        bg.colors = [NSColor(calibratedRed: 0.045, green: 0.105, blue: 0.235, alpha: 1).cgColor,
+                     NSColor(calibratedRed: 0.014, green: 0.025, blue: 0.052, alpha: 1).cgColor]
+        bg.startPoint = CGPoint(x: 0.2, y: 1)
+        bg.endPoint = CGPoint(x: 0.8, y: 0)
+        v.layer?.addSublayer(bg)
+        addOrbs(to: v.layer!, size: frame.size)
+
+        if withCountdown {
+            bigLabel = NSTextField(labelWithString: "0:00")
+            bigLabel!.font = .monospacedDigitSystemFont(ofSize: min(150, frame.width / 8), weight: .semibold)
+            bigLabel!.textColor = NSColor.white.withAlphaComponent(0.92)
+            bigLabel!.alignment = .center
+            bigLabel!.sizeToFit()
+            bigLabel!.frame.origin = NSPoint(x: frame.midX - bigLabel!.frame.width / 2,
+                                             y: frame.midY + 14)
+            v.addSubview(bigLabel!)
+
+            let cap = NSTextField(labelWithString: "休息中 · 触碰键鼠随时结束")
+            cap.font = .systemFont(ofSize: 15)
+            cap.textColor = NSColor.white.withAlphaComponent(0.45)
+            cap.sizeToFit()
+            cap.frame.origin = NSPoint(x: frame.midX - cap.frame.width / 2, y: frame.midY - 30)
+            v.addSubview(cap)
+        }
+        return v
+    }
+
+    private func addOrbs(to layer: CALayer, size: CGSize) {
+        let palette: [NSColor] = [
+            NSColor(calibratedRed: 0.23, green: 0.55, blue: 0.97, alpha: 1),
+            NSColor(calibratedRed: 0.16, green: 0.73, blue: 0.82, alpha: 1),
+            NSColor(calibratedRed: 0.35, green: 0.30, blue: 0.95, alpha: 1),
+            NSColor(calibratedRed: 0.10, green: 0.45, blue: 0.80, alpha: 1),
+        ]
+        for i in 0..<6 {
+            let orb = CALayer()
+            let d: CGFloat = 260 + CGFloat((i * 53) % 240)
+            orb.bounds = CGRect(x: 0, y: 0, width: d, height: d)
+            orb.position = CGPoint(x: CGFloat((i * 197 + 90) % Int(size.width)),
+                                   y: CGFloat((i * 311 + 140) % Int(size.height)))
+            if let cg = RestScreenController.glow(color: palette[i % palette.count]) {
+                orb.contents = cg
+            }
+            orb.opacity = 0.32
+            layer.addSublayer(orb)
+
+            let anim = CAKeyframeAnimation(keyPath: "position")
+            anim.path = wanderPath(size: size, seed: i)
+            anim.duration = 40 + Double((i * 17) % 30)
+            anim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            anim.repeatCount = .infinity
+            anim.autoreverses = true
+            orb.add(anim, forKey: "drift")
+
+            let breathe = CABasicAnimation(keyPath: "opacity")
+            breathe.fromValue = 0.20
+            breathe.toValue = 0.44
+            breathe.duration = 6 + Double((i * 7) % 5)
+            breathe.autoreverses = true
+            breathe.repeatCount = .infinity
+            orb.add(breathe, forKey: "breathe")
+        }
+    }
+
+    /// 柔光圆斑 (径向渐变图), 供光斑图层使用
+    private static func glow(color: NSColor) -> CGImage? {
+        if let cached = glowCache[color] {
+            return cached.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        }
+        let px: CGFloat = 160
+        let img = NSImage(size: NSSize(width: px, height: px))
+        img.lockFocus()
+        if let ctx = NSGraphicsContext.current?.cgContext {
+            let colors = [color.withAlphaComponent(0.85).cgColor, color.withAlphaComponent(0).cgColor]
+            if let grad = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                                     colors: colors as CFArray, locations: [0, 1]) {
+                ctx.drawRadialGradient(grad,
+                                       startCenter: CGPoint(x: px / 2, y: px / 2), startRadius: 0,
+                                       endCenter: CGPoint(x: px / 2, y: px / 2), endRadius: px / 2,
+                                       options: [])
+            }
+        }
+        img.unlockFocus()
+        glowCache[color] = img
+        return img.cgImage(forProposedRect: nil, context: nil, hints: nil)
+    }
+
+    private func wanderPath(size: CGSize, seed: Int) -> CGPath {
+        let p = CGMutablePath()
+        var pt = CGPoint(x: CGFloat((seed * 197 + 90) % Int(size.width)),
+                         y: CGFloat((seed * 311 + 140) % Int(size.height)))
+        p.move(to: pt)
+        for k in 1...4 {
+            pt = CGPoint(x: CGFloat((seed * 131 + k * 421) % Int(size.width)),
+                         y: CGFloat((seed * 173 + k * 263) % Int(size.height)))
+            p.addLine(to: pt)
+        }
+        p.closeSubpath()
+        return p
+    }
+
+    private func tick() {
+        let left = max(0, endTime.timeIntervalSinceNow)
+        let m = Int(left) / 60, s = Int(left) % 60
+        bigLabel?.stringValue = String(format: "%d:%02d", m, s)
+    }
+
+    func close() {
+        timer?.invalidate()
+        timer = nil
+        for w in windows { w.orderOut(nil) }
+        windows.removeAll()
+    }
+}
+
 // MARK: - 应用主体
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -429,6 +600,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var paused = false
     private var inBreak = false
     private var breakOverlay: BreakOverlayPanel?
+    private var restScreen: RestScreenController?
     private var activityToken: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -635,12 +807,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.startCountdown()
     }
 
-    /// 休息主体(后台线程): 拉起屏保保持到时长; 检测到键鼠活动立即结束
+    /// 休息主体(后台线程): 默认内置全屏休息画面(带倒计时); 也可选系统屏保模式(配通知推送)
     private func startBreakLoop() {
-        log("开始休息: 系统屏保 \(Int(config.breakSeconds)) 秒 (触碰键鼠立即结束)")
-        startScreensaver()
-        breakOverlay = BreakOverlayPanel(breakSeconds: config.breakSeconds)
-        BreakNotifier.shared.begin(breakSeconds: config.breakSeconds)
+        let builtin = useBuiltInRestScreen()
+        if builtin {
+            log("开始休息: 内置休息画面 \(Int(config.breakSeconds)) 秒 (触碰键鼠立即结束)")
+            restScreen = RestScreenController(breakSeconds: config.breakSeconds)
+        } else {
+            log("开始休息: 系统屏保 \(Int(config.breakSeconds)) 秒 (触碰键鼠立即结束)")
+            startScreensaver()
+            breakOverlay = BreakOverlayPanel(breakSeconds: config.breakSeconds)
+            BreakNotifier.shared.begin(breakSeconds: config.breakSeconds)
+        }
         let cfg = config
         Thread.detachNewThread {
             let breakStart = Date()
@@ -650,13 +828,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Thread.sleep(forTimeInterval: 0.5)
                 let elapsed = Date().timeIntervalSince(breakStart)
                 if elapsed >= cfg.breakSeconds { break }
-                // 屏保只能被键鼠输入关掉 → 空闲时长很短 = 用户在动键鼠
                 if systemIdleSeconds() < 1 {
                     if elapsed >= grace {
                         earlyExit = true
                         break
                     }
-                    startScreensaver()   // 宽限期内被余动关掉, 重新拉起
+                    if !builtin { startScreensaver() }   // 系统屏保模式下宽限期内被余动关掉时补拉
                 }
             }
             if earlyExit { log("检测到键鼠活动, 提前结束休息") }
@@ -664,14 +841,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func useBuiltInRestScreen() -> Bool {
+        let d = UserDefaults.standard
+        return d.object(forKey: "builtinRestScreen") == nil ? true : d.bool(forKey: "builtinRestScreen")
+    }
+
     private func breakEnded() {
         BreakNotifier.shared.cancel()
+        restScreen?.close()
+        restScreen = nil
         breakOverlay?.dismiss()
         breakOverlay = nil
         inBreak = false
         accumulated = 0
         lastTick = Date()
-        log("休息结束, 已恢复正常 (若人不在座, 屏保会在下次触碰键鼠时消失)")
+        log("休息结束, 已恢复正常")
         updateMenu()
     }
 }
