@@ -1,8 +1,15 @@
 # BreakReminder — 每小时强制休息 5 分钟（macOS + Windows）
 
+**在线下载：https://zmy-qc.github.io/BreakReminder/** （仓库 https://github.com/zmy-qc/BreakReminder）
+
 连续工作满 1 小时 → 弹窗提示「连续工作一小时，请休息一下」→ 播放系统自带屏保
 5 分钟 → 结束休息、重新计时。macOS 版为菜单栏 App（通用二进制，拷到其他 Mac
 直接用）；Windows 版为单文件 exe（约 20 KB，Win10/11 自带运行时，零依赖）。
+
+## 更新发布流程
+
+改完代码执行 `bash site/pack.sh`（重新打包双平台并同步 docs/），然后提交推送
+`git push`，GitHub Pages（main 分支 /docs）约 1 分钟后自动更新。
 
 ## Windows 版
 
