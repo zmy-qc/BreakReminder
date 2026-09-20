@@ -7,7 +7,50 @@
 
 import AppKit
 import CoreGraphics
+import UserNotifications
 import ServiceManagement
+
+// MARK: - 休息倒计时通知 (macOS 26 会话屏保渲染在特权合成层, 窗口无法盖在其上,
+//        通知是唯一能显示在屏保之上的通道; 休息开始一条 + 每分钟"还剩 X 分钟")
+
+final class BreakNotifier {
+    static let shared = BreakNotifier()
+    private var ids: [String] = []
+
+    func requestIfNeeded() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { _, _ in }
+    }
+
+    func begin(breakSeconds: Double) {
+        cancel()
+        let total = Int(breakSeconds)
+        add(1, "☕ 休息开始 · \(total / 60) 分钟", "触碰键鼠随时结束休息")
+        if total >= 120 {
+            for m in stride(from: total / 60 - 1, through: 1, by: -1) {
+                add(TimeInterval(total - m * 60), "还剩 \(m) 分钟", "触碰键鼠随时结束休息")
+            }
+        }
+    }
+
+    func cancel() {
+        guard !ids.isEmpty else { return }
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
+        ids.removeAll()
+    }
+
+    private func add(_ after: TimeInterval, _ title: String, _ body: String) {
+        let id = "breakreminder.\(Int(after))"
+        ids.append(id)
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .none   // 提示音已在触发时播放过
+        let req = UNNotificationRequest(
+            identifier: id, content: content,
+            trigger: UNTimeIntervalNotificationTrigger(timeInterval: after, repeats: false))
+        UNUserNotificationCenter.current().add(req)
+    }
+}
 
 // MARK: - 日志 (追加写入 ~/Library/Logs/BreakReminder.log)
 
@@ -394,6 +437,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             options: .userInitiatedAllowingIdleSystemSleep,
             reason: "BreakReminder 工作时长监控")
         buildMenu()
+        BreakNotifier.shared.requestIfNeeded()
         let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.onTick() }
         RunLoop.main.add(t, forMode: .common)
         autoRegisterLoginItemIfNeeded()
@@ -596,6 +640,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         log("开始休息: 系统屏保 \(Int(config.breakSeconds)) 秒 (触碰键鼠立即结束)")
         startScreensaver()
         breakOverlay = BreakOverlayPanel(breakSeconds: config.breakSeconds)
+        BreakNotifier.shared.begin(breakSeconds: config.breakSeconds)
         let cfg = config
         Thread.detachNewThread {
             let breakStart = Date()
@@ -620,6 +665,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func breakEnded() {
+        BreakNotifier.shared.cancel()
         breakOverlay?.dismiss()
         breakOverlay = nil
         inBreak = false
