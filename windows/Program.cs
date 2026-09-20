@@ -573,7 +573,7 @@ namespace BreakReminder
             accumulated = 0;
             lastTick = DateTime.Now;
             UpdateMenu();
-            StartBreakLoop();
+            PresentBreakDialog();
         }
 
         private void OnReset(object sender, EventArgs e)
@@ -649,8 +649,13 @@ namespace BreakReminder
             inBreak = true;
             accumulated = 0;
             UpdateMenu();
-            if (cfg.Sound) SystemSounds.Exclamation.Play();
+            PresentBreakDialog();
+        }
 
+        /// 弹出居中倒计时确认卡 (自动触发与"立即休息"共用)
+        private void PresentBreakDialog()
+        {
+            if (cfg.Sound) SystemSounds.Exclamation.Play();
             using (BreakDialog dlg = new BreakDialog(cfg.DialogTimeout, cfg.BreakSeconds / 60))
             {
                 DialogResult r = dlg.ShowDialog();
@@ -705,6 +710,16 @@ namespace BreakReminder
                 try { p = Process.Start(saver, "/s"); }
                 catch (Exception ex) { Log.Write("屏保启动失败: " + ex.Message); Thread.Sleep(5000); continue; }
                 if (p == null) { Thread.Sleep(2000); continue; }
+
+                // 屏保窗口显示后把浮层重新压到最顶 (同属置顶窗口, 后出现者在上)
+                Thread.Sleep(700);
+                try
+                {
+                    BreakOverlay o = overlay;
+                    if (o != null && !o.IsDisposed)
+                        o.Invoke((MethodInvoker)delegate { o.TopMost = false; o.TopMost = true; });
+                }
+                catch { }
 
                 // 等屏保退出(键鼠输入关掉了它), 或休息时间到
                 while (!p.HasExited && (DateTime.Now - start).TotalSeconds < cfg.BreakSeconds)

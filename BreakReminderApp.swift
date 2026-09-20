@@ -292,6 +292,7 @@ final class BreakOverlayPanel: NSPanel {
     private var label: NSTextField!
     private var timer: Timer?
     private let endTime: Date
+    private var adaptTicks = 0
 
     init(breakSeconds: Double) {
         endTime = Date().addingTimeInterval(breakSeconds)
@@ -299,7 +300,8 @@ final class BreakOverlayPanel: NSPanel {
                    styleMask: [.nonactivatingPanel], backing: .buffered, defer: false)
 
         isFloatingPanel = true
-        level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 2)   // 尽量盖在屏保之上
+        // 实测 macOS 26: loginwindow 托管的屏保窗口在 layer 2001~2004, 常规 screenSaver 层(1000)会被盖住
+        level = NSWindow.Level(rawValue: 2100)
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false
@@ -333,7 +335,30 @@ final class BreakOverlayPanel: NSPanel {
         let left = max(0, endTime.timeIntervalSinceNow)
         let m = Int(left) / 60, s = Int(left) % 60
         label.stringValue = String(format: "休息中 · 还剩 %d:%02d", m, s)
+        if adaptTicks < 10 { adaptTicks += 1; adaptLevel() }
         if left <= 0 { dismiss() }
+    }
+
+    /// 兜底自适应: 若探测到比 2100 更高的外部窗口层级(如系统升级后), 再往上压
+    private var loggedDiag = false
+    private func adaptLevel() {
+        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else { return }
+        let myPid = Int32(getpid())
+        var maxLayer = 0
+        for w in list {
+            if let pid = w[kCGWindowOwnerPID as String] as? Int32, pid == myPid { continue }
+            if let layer = w[kCGWindowLayer as String] as? Int, layer > maxLayer { maxLayer = layer }
+        }
+        if !loggedDiag {
+            loggedDiag = true
+            log("倒计时浮层层级诊断: 可见窗口 \(list.count) 个, 最高外部层级 \(maxLayer), 浮层层级 \(level.rawValue)")
+        }
+        let target = min(maxLayer + 1, 10_000)
+        if level.rawValue < target {
+            level = NSWindow.Level(rawValue: target)
+            orderFrontRegardless()
+            log("倒计时浮层: 探测到更高层级 \(maxLayer), 浮层已调至 \(target)")
+        }
     }
 
     func dismiss() {
@@ -462,7 +487,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         accumulated = 0
         lastTick = Date()
         updateMenu()
-        startBreakLoop()
+        presentBreakDialog()
     }
 
     @objc private func resetTimer() {
@@ -540,8 +565,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         inBreak = true
         accumulated = 0
         updateMenu()
-        if config.sound { NSSound(named: "Glass")?.play() }
+        presentBreakDialog()
+    }
 
+    /// 弹出居中倒计时确认卡 (自动触发与"立即休息"共用)
+    private func presentBreakDialog() {
+        if config.sound { NSSound(named: "Glass")?.play() }
         NSApp.activate(ignoringOtherApps: true)
         let panel = BreakCountdownPanel(timeout: config.dialogTimeout,
                                         breakMinutes: config.breakSeconds / 60)
