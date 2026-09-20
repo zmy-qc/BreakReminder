@@ -92,6 +92,7 @@ struct Config {
             "idleResetMin": 5.0,
             "dialogTimeoutSec": 5.0,
             "soundOn": true,
+            "builtinRestScreen": false,   // 默认用系统屏保; 内置画面为可选
         ])
     }
 
@@ -188,7 +189,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
         let d0 = UserDefaults.standard
         builtinCheck = NSButton(checkboxWithTitle: "使用内置休息画面（全屏动画 + 倒计时）", target: nil, action: nil)
-        builtinCheck.state = (d0.object(forKey: "builtinRestScreen") == nil ? true : d0.bool(forKey: "builtinRestScreen")) ? .on : .off
+        builtinCheck.state = d0.bool(forKey: "builtinRestScreen") ? .on : .off
 
         let save = NSButton(title: "保存", target: self, action: #selector(save))
         save.bezelStyle = .rounded
@@ -842,8 +843,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func useBuiltInRestScreen() -> Bool {
-        let d = UserDefaults.standard
-        return d.object(forKey: "builtinRestScreen") == nil ? true : d.bool(forKey: "builtinRestScreen")
+        UserDefaults.standard.bool(forKey: "builtinRestScreen")
     }
 
     private func breakEnded() {
