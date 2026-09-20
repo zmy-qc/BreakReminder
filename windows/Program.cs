@@ -48,7 +48,6 @@ namespace BreakReminder
         public double BreakSeconds = 300;
         public double IdleResetSeconds = 300;
         public double DialogTimeout = 30;
-        public int DismissSkip = 3;
         public bool Sound = true;
 
         public static string IniPath()
@@ -81,7 +80,7 @@ namespace BreakReminder
                         else if (k == "dialogTimeoutSec") c.DialogTimeout = Math.Max(3, d);
                     }
                     int n;
-                    if (k == "dismissSkip" && int.TryParse(v, out n)) c.DismissSkip = Math.Min(10, Math.Max(1, n));
+                    if (k == "dismissSkip" && int.TryParse(v, out n)) { }   // 兼容旧配置, 已废弃
                     if (k == "soundOn") c.Sound = (v == "1" || v.ToLower() == "true");
                 }
             }
@@ -97,7 +96,6 @@ namespace BreakReminder
             sb.AppendLine("breakMin=" + (BreakSeconds / 60).ToString("0.##"));
             sb.AppendLine("idleResetMin=" + (IdleResetSeconds / 60).ToString("0.##"));
             sb.AppendLine("dialogTimeoutSec=" + DialogTimeout.ToString("0.##"));
-            sb.AppendLine("dismissSkip=" + DismissSkip);
             sb.AppendLine("soundOn=" + (Sound ? "1" : "0"));
             File.WriteAllText(IniPath(), sb.ToString());
         }
@@ -178,7 +176,7 @@ namespace BreakReminder
         private System.Windows.Forms.Timer countdown;
         private int leftSec;
 
-        public BreakDialog(double timeoutSec, double breakMin, int dismissSkip)
+        public BreakDialog(double timeoutSec, double breakMin)
         {
             Text = "BreakReminder 休息提醒";
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -196,8 +194,8 @@ namespace BreakReminder
             Controls.Add(msg);
 
             sub = new Label();
-            sub.Text = string.Format("接下来播放系统屏保 {0:0} 分钟；休息期间键鼠活动 {1} 次后放行。",
-                                     breakMin, dismissSkip);
+            sub.Text = string.Format("接下来播放系统屏保 {0:0} 分钟；休息期间触碰键鼠立即结束休息。",
+                                     breakMin);
             sub.Font = new Font("Microsoft YaHei UI", 9f);
             sub.ForeColor = SystemColors.GrayText;
             sub.TextAlign = ContentAlignment.MiddleCenter;
@@ -255,7 +253,7 @@ namespace BreakReminder
         public delegate void SavedHandler();
         public event SavedHandler OnSaved;
 
-        private NumericUpDown work, brk, idle, timeout, skip;
+        private NumericUpDown work, brk, idle, timeout;
         private CheckBox sound;
         private Config cfg;
 
@@ -267,23 +265,22 @@ namespace BreakReminder
             StartPosition = FormStartPosition.CenterScreen;
             MaximizeBox = false;
             MinimizeBox = false;
-            ClientSize = new Size(340, 268);
+            ClientSize = new Size(340, 212);
 
             work = AddRow("连续工作时长（分钟）", 24, (decimal)(cfg.WorkSeconds / 60), 1, 480, 0);
             brk = AddRow("休息(屏保)时长（分钟）", 60, (decimal)(cfg.BreakSeconds / 60), 0.5m, 60, 1);
             idle = AddRow("空闲多久算已休息（分钟）", 96, (decimal)(cfg.IdleResetSeconds / 60), 1, 120, 0);
             timeout = AddRow("提示框超时（秒）", 132, (decimal)cfg.DialogTimeout, 3, 300, 0);
-            skip = AddRow("键鼠打断几次后放行（次）", 168, cfg.DismissSkip, 1, 10, 0);
 
             sound = new CheckBox();
             sound.Text = "触发时播放提示音";
             sound.Checked = cfg.Sound;
-            sound.SetBounds(24, 200, 200, 24);
+            sound.SetBounds(24, 166, 200, 24);
             Controls.Add(sound);
 
             Button save = new Button();
             save.Text = "保存";
-            save.SetBounds(224, 196, 88, 32);
+            save.SetBounds(224, 162, 88, 32);
             save.Click += OnSave;
             Controls.Add(save);
         }
@@ -311,7 +308,6 @@ namespace BreakReminder
             cfg.BreakSeconds = (double)brk.Value * 60;
             cfg.IdleResetSeconds = (double)idle.Value * 60;
             cfg.DialogTimeout = (double)timeout.Value;
-            cfg.DismissSkip = (int)skip.Value;
             cfg.Sound = sound.Checked;
             cfg.Save();
             if (OnSaved != null) OnSaved();
@@ -558,7 +554,7 @@ namespace BreakReminder
             UpdateMenu();
             if (cfg.Sound) SystemSounds.Exclamation.Play();
 
-            using (BreakDialog dlg = new BreakDialog(cfg.DialogTimeout, cfg.BreakSeconds / 60, cfg.DismissSkip))
+            using (BreakDialog dlg = new BreakDialog(cfg.DialogTimeout, cfg.BreakSeconds / 60))
             {
                 DialogResult r = dlg.ShowDialog();
                 if (r == DialogResult.OK)
@@ -590,42 +586,44 @@ namespace BreakReminder
             if (saver == null)
             {
                 Log.Write("未找到系统屏保, 改为静置等待");
-                Thread.Sleep((int)(cfg.BreakSeconds * 1000));
+                DateTime s0 = DateTime.Now;
+                while ((DateTime.Now - s0).TotalSeconds < cfg.BreakSeconds)
+                {
+                    Thread.Sleep(1000);
+                    if ((DateTime.Now - s0).TotalSeconds >= 3 && Idle.Seconds() < 1) break;
+                }
                 BreakDone("休息结束, 已恢复正常");
                 return;
             }
 
-            Log.Write(string.Format("开始休息: 系统屏保 {0:0} 秒 (被关掉会自动重新拉起)", cfg.BreakSeconds));
+            Log.Write(string.Format("开始休息: 系统屏保 {0:0} 秒 (触碰键鼠立即结束)", cfg.BreakSeconds));
             DateTime start = DateTime.Now;
-            int strikes = 0;
 
             while (true)
             {
-                if ((DateTime.Now - start).TotalSeconds >= cfg.BreakSeconds) { BreakDone("休息结束, 已恢复正常"); return; }
-
                 Process p;
                 try { p = Process.Start(saver, "/s"); }
                 catch (Exception ex) { Log.Write("屏保启动失败: " + ex.Message); Thread.Sleep(5000); continue; }
                 if (p == null) { Thread.Sleep(2000); continue; }
 
+                // 等屏保退出(键鼠输入关掉了它), 或休息时间到
                 while (!p.HasExited && (DateTime.Now - start).TotalSeconds < cfg.BreakSeconds)
                     Thread.Sleep(300);
 
                 if (!p.HasExited)
                 {
-                    try { p.Kill(); } catch { }
-                    BreakDone("休息结束, 已恢复正常 (屏保已关闭)");
+                    try { p.Kill(); } catch { }     // 时间到: 程序直接关屏保, 桌面立即恢复
+                    BreakDone("休息结束, 已恢复正常");
                     return;
                 }
 
-                strikes++;
-                if (strikes >= cfg.DismissSkip)
+                // 屏保被键鼠输入关掉: 宽限期(3秒, 防点"马上休息"后手部余动)过后立即结束休息
+                if ((DateTime.Now - start).TotalSeconds >= 3)
                 {
-                    BreakDone("屏保被关闭 " + strikes + " 次, 放行");
+                    BreakDone("检测到键鼠活动, 提前结束休息");
                     return;
                 }
-                Log.Write(string.Format("屏保被提前关闭 ({0}/{1}), 重新拉起", strikes, cfg.DismissSkip));
-                Thread.Sleep(800);
+                Thread.Sleep(300);
             }
         }
 

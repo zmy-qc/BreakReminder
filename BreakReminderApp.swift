@@ -40,7 +40,6 @@ struct Config {
     var breakSeconds: Double
     var idleResetSeconds: Double
     var dialogTimeout: Double
-    var maxDismisses: Int
     var sound: Bool
 
     static func registerDefaults() {
@@ -49,7 +48,6 @@ struct Config {
             "breakMin": 5.0,
             "idleResetMin": 5.0,
             "dialogTimeoutSec": 30.0,
-            "dismissSkip": 3,
             "soundOn": true,
         ])
     }
@@ -62,7 +60,6 @@ struct Config {
             breakSeconds: minutes("breakMin"),
             idleResetSeconds: minutes("idleResetMin"),
             dialogTimeout: max(3, d.double(forKey: "dialogTimeoutSec")),
-            maxDismisses: max(1, d.integer(forKey: "dismissSkip")),
             sound: d.bool(forKey: "soundOn")
         )
     }
@@ -106,7 +103,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     init(config: Config, onSave: @escaping () -> Void) {
         self.onSave = onSave
         let win = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 380, height: 340),
+            contentRect: NSRect(x: 0, y: 0, width: 380, height: 300),
             styleMask: [.titled, .closable],
             backing: .buffered, defer: false)
         win.title = "BreakReminder 设置"
@@ -137,7 +134,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             [lbl("休息(屏保)时长"),      num("breakMin", config.breakSeconds / 60),      unit("分钟")],
             [lbl("空闲多久算已休息过"),  num("idleResetMin", config.idleResetSeconds / 60), unit("分钟")],
             [lbl("提示框超时"),          num("dialogTimeoutSec", config.dialogTimeout),  unit("秒")],
-            [lbl("键鼠打断几次后放行"),  num("dismissSkip", Double(config.maxDismisses)), unit("次")],
         ])
         grid.column(at: 0).xPlacement = .leading
         grid.rowSpacing = 10
@@ -175,8 +171,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         clamp("breakMin", 0.5, 60)
         clamp("idleResetMin", 1, 120)
         clamp("dialogTimeoutSec", 3, 300)
-        let skip = Int(numberFields["dismissSkip"]!.stringValue) ?? 3
-        d.set(min(10, max(1, skip)), forKey: "dismissSkip")
         d.set(soundCheck.state == .on, forKey: "soundOn")
         onSave()
         log("设置已保存")
@@ -387,8 +381,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.alertStyle = .warning
         alert.messageText = "连续工作一小时，请休息一下 ☕"
         alert.informativeText = String(
-            format: "接下来播放系统屏保 %.0f 分钟；休息期间键鼠活动 %d 次后放行。",
-            config.breakSeconds / 60, config.maxDismisses)
+            format: "接下来播放系统屏保 %.0f 分钟；休息期间触碰键鼠立即结束。",
+            config.breakSeconds / 60)
         alert.addButton(withTitle: "马上休息")
         alert.addButton(withTitle: "跳过本次")
 
@@ -412,30 +406,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 休息主体(后台线程): 周期补拉屏保保持时长; 键鼠活动累计 N 次放行
+    /// 休息主体(后台线程): 拉起屏保保持到时长; 检测到键鼠活动立即结束
     private func startBreakLoop() {
-        log("开始休息: 系统屏保 \(Int(config.breakSeconds)) 秒 (被关掉会自动重新拉起)")
+        log("开始休息: 系统屏保 \(Int(config.breakSeconds)) 秒 (触碰键鼠立即结束)")
         startScreensaver()
         let cfg = config
         Thread.detachNewThread {
             let breakStart = Date()
-            var strikes = 0
+            let grace: Double = 3   // 宽限期: 忽略点"马上休息"后手还没离开鼠标的余动
+            var earlyExit = false
             while true {
-                let remaining = cfg.breakSeconds - Date().timeIntervalSince(breakStart)
-                if remaining <= 0 { break }
-                Thread.sleep(forTimeInterval: min(5, remaining))
-                if Date().timeIntervalSince(breakStart) >= cfg.breakSeconds { break }
-                // 屏保只能被键鼠输入关掉 → 休息期间的键鼠活动 = 用户在打断休息
-                if systemIdleSeconds() < 5 {
-                    strikes += 1
-                    if strikes >= cfg.maxDismisses {
-                        log("休息期间检测到 \(strikes) 次键鼠活动, 放行")
+                Thread.sleep(forTimeInterval: 0.5)
+                let elapsed = Date().timeIntervalSince(breakStart)
+                if elapsed >= cfg.breakSeconds { break }
+                // 屏保只能被键鼠输入关掉 → 空闲时长很短 = 用户在动键鼠
+                if systemIdleSeconds() < 1 {
+                    if elapsed >= grace {
+                        earlyExit = true
                         break
                     }
-                    log("休息期间检测到键鼠活动 (\(strikes)/\(cfg.maxDismisses)), 重新拉起屏保")
+                    startScreensaver()   // 宽限期内被余动关掉, 重新拉起
                 }
-                startScreensaver()   // 已在运行时为空操作
             }
+            if earlyExit { log("检测到键鼠活动, 提前结束休息") }
             DispatchQueue.main.async { self.breakEnded() }
         }
     }
