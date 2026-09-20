@@ -47,7 +47,7 @@ struct Config {
             "workMin": 60.0,
             "breakMin": 5.0,
             "idleResetMin": 5.0,
-            "dialogTimeoutSec": 30.0,
+            "dialogTimeoutSec": 5.0,
             "soundOn": true,
         ])
     }
@@ -180,6 +180,171 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) { onClose() }
 }
 
+// MARK: - 居中倒计时弹窗 (大数字倒数 N 秒自动进入屏保)
+
+final class BreakCountdownPanel: NSPanel {
+    var onChoice: ((Bool) -> Void)?   // true = 进入休息
+    private var numberLabel: NSTextField!
+    private var timer: Timer?
+    private var secondsLeft: Int
+
+    init(timeout: Double, breakMinutes: Double) {
+        secondsLeft = max(1, Int(timeout.rounded(.up)))
+        super.init(contentRect: NSRect(x: 0, y: 0, width: 380, height: 216),
+                   styleMask: [.nonactivatingPanel], backing: .buffered, defer: false)
+
+        isFloatingPanel = true
+        level = .floating
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = true
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        hidesOnDeactivate = false
+
+        let card = NSView(frame: NSRect(x: 0, y: 0, width: 380, height: 216))
+        card.wantsLayer = true
+        card.layer?.backgroundColor = NSColor(calibratedRed: 0.11, green: 0.14, blue: 0.20, alpha: 0.97).cgColor
+        card.layer?.cornerRadius = 20
+
+        let title = NSTextField(labelWithString: "☕ 连续工作一小时，请休息一下")
+        title.font = .systemFont(ofSize: 15, weight: .semibold)
+        title.textColor = .white
+        title.alignment = .center
+        title.frame = NSRect(x: 24, y: 156, width: 332, height: 24)
+        card.addSubview(title)
+
+        numberLabel = NSTextField(labelWithString: "\(secondsLeft)")
+        numberLabel.font = .monospacedDigitSystemFont(ofSize: 44, weight: .bold)
+        numberLabel.textColor = NSColor(calibratedRed: 0.42, green: 0.66, blue: 1.0, alpha: 1)
+        numberLabel.alignment = .center
+        numberLabel.frame = NSRect(x: 24, y: 88, width: 332, height: 56)
+        card.addSubview(numberLabel)
+
+        let caption = NSTextField(labelWithString: String(format: "秒后自动进入屏保 · 本次休息 %.0f 分钟", breakMinutes))
+        caption.font = .systemFont(ofSize: 11.5)
+        caption.textColor = NSColor(calibratedWhite: 0.66, alpha: 1)
+        caption.alignment = .center
+        caption.frame = NSRect(x: 24, y: 62, width: 332, height: 20)
+        card.addSubview(caption)
+
+        let skip = makeButton("本次跳过", bg: NSColor(calibratedWhite: 0.20, alpha: 1),
+                              fg: NSColor(calibratedWhite: 0.85, alpha: 1),
+                              action: #selector(skipTapped))
+        skip.frame = NSRect(x: 32, y: 18, width: 150, height: 34)
+        card.addSubview(skip)
+
+        let go = makeButton("进入休息", bg: NSColor(calibratedRed: 0.23, green: 0.55, blue: 0.97, alpha: 1),
+                            fg: .white, action: #selector(goTapped))
+        go.frame = NSRect(x: 198, y: 18, width: 150, height: 34)
+        card.addSubview(go)
+
+        contentView = card
+    }
+
+    private func makeButton(_ title: String, bg: NSColor, fg: NSColor, action: Selector) -> NSButton {
+        let b = NSButton(title: title, target: self, action: action)
+        b.isBordered = false
+        b.wantsLayer = true
+        b.layer?.backgroundColor = bg.cgColor
+        b.layer?.cornerRadius = 10
+        b.layer?.masksToBounds = true
+        b.attributedTitle = NSAttributedString(string: title, attributes: [
+            .foregroundColor: fg,
+            .font: NSFont.systemFont(ofSize: 14, weight: .semibold),
+        ])
+        return b
+    }
+
+    func startCountdown() {
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            self?.tick()
+        }
+        RunLoop.main.add(timer!, forMode: .common)
+    }
+
+    private func tick() {
+        secondsLeft -= 1
+        if secondsLeft <= 0 {
+            finish(true)   // 倒计时结束 → 自动进入休息
+            return
+        }
+        numberLabel.stringValue = "\(secondsLeft)"
+    }
+
+    @objc private func goTapped()   { finish(true) }
+    @objc private func skipTapped() { finish(false) }
+
+    private func finish(_ take: Bool) {
+        timer?.invalidate()
+        timer = nil
+        let cb = onChoice
+        onChoice = nil
+        close()
+        cb?(take)
+    }
+
+    override var canBecomeKey: Bool { true }
+}
+
+// MARK: - 休息期间剩余时间浮层 (半透明, 点击完全穿透, 不遮挡屏保)
+
+final class BreakOverlayPanel: NSPanel {
+    private var label: NSTextField!
+    private var timer: Timer?
+    private let endTime: Date
+
+    init(breakSeconds: Double) {
+        endTime = Date().addingTimeInterval(breakSeconds)
+        super.init(contentRect: NSRect(x: 0, y: 0, width: 320, height: 50),
+                   styleMask: [.nonactivatingPanel], backing: .buffered, defer: false)
+
+        isFloatingPanel = true
+        level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 2)   // 尽量盖在屏保之上
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = false
+        ignoresMouseEvents = true   // 鼠标事件全部穿透给屏保
+        collectionBehavior = [.canJoinAllSpaces, .stationary]
+        hidesOnDeactivate = false
+
+        let card = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 50))
+        card.wantsLayer = true
+        card.layer?.backgroundColor = NSColor(calibratedWhite: 0.04, alpha: 0.72).cgColor
+        card.layer?.cornerRadius = 25
+
+        label = NSTextField(labelWithString: "休息中 · 还剩 0:00")
+        label.font = .monospacedDigitSystemFont(ofSize: 15, weight: .medium)
+        label.textColor = .white
+        label.alignment = .center
+        label.frame = card.bounds
+        card.addSubview(label)
+        contentView = card
+
+        if let visible = NSScreen.main?.visibleFrame {
+            setFrameOrigin(NSPoint(x: visible.midX - 160, y: visible.minY + 48))
+        }
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
+        RunLoop.main.add(timer!, forMode: .common)
+        tick()
+        orderFrontRegardless()
+    }
+
+    private func tick() {
+        let left = max(0, endTime.timeIntervalSinceNow)
+        let m = Int(left) / 60, s = Int(left) % 60
+        label.stringValue = String(format: "休息中 · 还剩 %d:%02d", m, s)
+        if left <= 0 { dismiss() }
+    }
+
+    func dismiss() {
+        timer?.invalidate()
+        timer = nil
+        orderOut(nil)
+    }
+
+    override var canBecomeKey: Bool { false }
+}
+
 // MARK: - 应用主体
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -195,6 +360,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastTick = Date()
     private var paused = false
     private var inBreak = false
+    private var breakOverlay: BreakOverlayPanel?
     private var activityToken: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -377,43 +543,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if config.sound { NSSound(named: "Glass")?.play() }
 
         NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = "连续工作一小时，请休息一下 ☕"
-        alert.informativeText = String(
-            format: "接下来播放系统屏保 %.0f 分钟；休息期间触碰键鼠立即结束。",
-            config.breakSeconds / 60)
-        alert.addButton(withTitle: "马上休息")
-        alert.addButton(withTitle: "跳过本次")
-
-        var timedOut = false
-        let timeoutTimer = Timer(timeInterval: config.dialogTimeout, repeats: false) { _ in
-            timedOut = true
-            NSApp.stopModal(withCode: .alertFirstButtonReturn)   // 超时未响应 → 视为开始休息
+        let panel = BreakCountdownPanel(timeout: config.dialogTimeout,
+                                        breakMinutes: config.breakSeconds / 60)
+        panel.onChoice = { [weak self] take in
+            guard let self else { return }
+            if take {
+                log("开始休息 (倒计时结束/用户确认)")
+                self.startBreakLoop()
+            } else {
+                log("用户选择: 本次跳过")
+                self.inBreak = false
+                self.lastTick = Date()
+                self.updateMenu()
+            }
         }
-        RunLoop.main.add(timeoutTimer, forMode: .common)
-        let resp = alert.runModal()
-        timeoutTimer.invalidate()
-
-        if resp == .alertFirstButtonReturn {
-            log(timedOut ? "提示框超时, 自动开始休息" : "用户选择马上休息")
-            startBreakLoop()
-        } else {
-            log("用户跳过本次休息")
-            inBreak = false
-            lastTick = Date()
-            updateMenu()
-        }
+        panel.center()
+        panel.makeKeyAndOrderFront(nil)
+        panel.startCountdown()
     }
 
     /// 休息主体(后台线程): 拉起屏保保持到时长; 检测到键鼠活动立即结束
     private func startBreakLoop() {
         log("开始休息: 系统屏保 \(Int(config.breakSeconds)) 秒 (触碰键鼠立即结束)")
         startScreensaver()
+        breakOverlay = BreakOverlayPanel(breakSeconds: config.breakSeconds)
         let cfg = config
         Thread.detachNewThread {
             let breakStart = Date()
-            let grace: Double = 3   // 宽限期: 忽略点"马上休息"后手还没离开鼠标的余动
+            let grace: Double = 3   // 宽限期: 忽略点"进入休息"后手还没离开鼠标的余动
             var earlyExit = false
             while true {
                 Thread.sleep(forTimeInterval: 0.5)
@@ -434,6 +591,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func breakEnded() {
+        breakOverlay?.dismiss()
+        breakOverlay = nil
         inBreak = false
         accumulated = 0
         lastTick = Date()

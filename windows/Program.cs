@@ -168,56 +168,95 @@ namespace BreakReminder
         }
     }
 
-    // ---------------- 提示对话框 (超时自动开始休息) ----------------
+    // ---------------- 通用圆角辅助 ----------------
+
+    static class UIUtil
+    {
+        public static void Round(Control c, int r)
+        {
+            using (GraphicsPath p = new GraphicsPath())
+            {
+                int d = r * 2;
+                p.AddArc(0, 0, d, d, 180, 90);
+                p.AddArc(c.Width - d, 0, d, d, 270, 90);
+                p.AddArc(c.Width - d, c.Height - d, d, d, 0, 90);
+                p.AddArc(0, c.Height - d, d, d, 90, 90);
+                p.CloseFigure();
+                c.Region = new Region(p);
+            }
+        }
+
+        public static Label Label(string text, Font font, Color color, int y, int width)
+        {
+            Label l = new Label();
+            l.Text = text;
+            l.Font = font;
+            l.ForeColor = color;
+            l.BackColor = Color.Transparent;
+            l.TextAlign = ContentAlignment.MiddleCenter;
+            l.AutoSize = false;
+            l.SetBounds((400 - width) / 2, y, width, font.Height + 8);
+            return l;
+        }
+
+        public static Button Button(string text, Color back, Color fore, int x, int y)
+        {
+            Button b = new Button();
+            b.Text = text;
+            b.FlatStyle = FlatStyle.Flat;
+            b.FlatAppearance.BorderSize = 0;
+            b.FlatAppearance.MouseOverBackColor = back;
+            b.BackColor = back;
+            b.ForeColor = fore;
+            b.Font = new Font("Microsoft YaHei UI", 10.5f, FontStyle.Bold);
+            b.SetBounds(x, y, 130, 38);
+            UIUtil.Round(b, 9);
+            return b;
+        }
+    }
+
+    // ---------------- 提示对话框 (居中大数字倒计时, 深色卡片) ----------------
 
     class BreakDialog : Form
     {
-        private Label sub;
+        private Label number;
         private System.Windows.Forms.Timer countdown;
         private int leftSec;
 
         public BreakDialog(double timeoutSec, double breakMin)
         {
-            Text = "BreakReminder 休息提醒";
-            FormBorderStyle = FormBorderStyle.FixedDialog;
+            FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.CenterScreen;
             TopMost = true;
-            MaximizeBox = false;
-            MinimizeBox = false;
-            ClientSize = new Size(430, 168);
+            ShowInTaskbar = false;
+            ClientSize = new Size(400, 232);
+            BackColor = Color.FromArgb(28, 36, 51);
+            UIUtil.Round(this, 20);
 
-            Label msg = new Label();
-            msg.Text = "连续工作一小时，请休息一下 ☕";
-            msg.Font = new Font("Microsoft YaHei UI", 13f, FontStyle.Bold);
-            msg.TextAlign = ContentAlignment.MiddleCenter;
-            msg.SetBounds(10, 18, 410, 32);
-            Controls.Add(msg);
+            Controls.Add(UIUtil.Label("☕ 连续工作一小时，请休息一下",
+                new Font("Microsoft YaHei UI", 13f, FontStyle.Bold), Color.White, 28, 380));
+            Controls.Add(UIUtil.Label("距自动进入屏保",
+                new Font("Microsoft YaHei UI", 9.5f), Color.FromArgb(147, 161, 181), 62, 380));
 
-            sub = new Label();
-            sub.Text = string.Format("接下来播放系统屏保 {0:0} 分钟；休息期间触碰键鼠立即结束休息。",
-                                     breakMin);
-            sub.Font = new Font("Microsoft YaHei UI", 9f);
-            sub.ForeColor = SystemColors.GrayText;
-            sub.TextAlign = ContentAlignment.MiddleCenter;
-            sub.SetBounds(10, 56, 410, 40);
-            Controls.Add(sub);
+            leftSec = Math.Max(1, (int)Math.Ceiling(timeoutSec));
+            number = UIUtil.Label(leftSec.ToString(),
+                new Font("Segoe UI", 46f, FontStyle.Bold), Color.FromArgb(111, 176, 255), 84, 380);
+            Controls.Add(number);
 
-            Button ok = new Button();
-            ok.Text = "马上休息";
-            ok.SetBounds(210, 108, 100, 34);
-            ok.DialogResult = DialogResult.OK;
-            Controls.Add(ok);
+            Controls.Add(UIUtil.Label(string.Format("本次休息 {0:0} 分钟", breakMin),
+                new Font("Microsoft YaHei UI", 9.5f), Color.FromArgb(147, 161, 181), 156, 380));
 
-            Button skip = new Button();
-            skip.Text = "跳过本次";
-            skip.SetBounds(320, 108, 100, 34);
+            Button skip = UIUtil.Button("本次跳过", Color.FromArgb(42, 54, 72), Color.FromArgb(199, 210, 224), 56, 180);
             skip.DialogResult = DialogResult.Cancel;
             Controls.Add(skip);
 
-            AcceptButton = ok;
+            Button go = UIUtil.Button("进入休息", Color.FromArgb(58, 140, 247), Color.White, 214, 180);
+            go.DialogResult = DialogResult.OK;
+            Controls.Add(go);
+
+            AcceptButton = go;
             CancelButton = skip;
 
-            leftSec = (int)timeoutSec;
             countdown = new System.Windows.Forms.Timer();
             countdown.Interval = 1000;
             countdown.Tick += OnSecond;
@@ -230,12 +269,12 @@ namespace BreakReminder
             if (leftSec <= 0)
             {
                 countdown.Stop();
-                DialogResult = DialogResult.OK;   // 超时未响应 → 视为开始休息
+                DialogResult = DialogResult.OK;   // 倒计时结束 → 自动进入休息
                 Close();
             }
             else
             {
-                sub.Text = string.Format("({0} 秒后自动开始休息)", leftSec);
+                number.Text = leftSec.ToString();
             }
         }
 
@@ -243,6 +282,63 @@ namespace BreakReminder
         {
             countdown.Stop();
             base.OnFormClosed(e);
+        }
+    }
+
+    // ---------------- 休息期间剩余时间浮层 (半透明, 点击穿透, 不遮挡屏保) ----------------
+
+    class BreakOverlay : Form
+    {
+        private Label label;
+        private System.Windows.Forms.Timer timer;
+        private DateTime endTime;
+
+        public BreakOverlay(double breakSeconds)
+        {
+            FormBorderStyle = FormBorderStyle.None;
+            ShowInTaskbar = false;
+            TopMost = true;
+            StartPosition = FormStartPosition.Manual;
+            BackColor = Color.FromArgb(10, 13, 20);
+            Opacity = 0.82;
+            ClientSize = new Size(300, 48);
+
+            label = new Label();
+            label.Text = "休息中 · 还剩 0:00";
+            label.Font = new Font("Microsoft YaHei UI", 12f, FontStyle.Bold);
+            label.ForeColor = Color.White;
+            label.BackColor = Color.Transparent;
+            label.TextAlign = ContentAlignment.MiddleCenter;
+            label.Dock = DockStyle.Fill;
+            Controls.Add(label);
+            UIUtil.Round(this, 24);
+
+            Rectangle wa = Screen.PrimaryScreen.WorkingArea;
+            Location = new Point(wa.X + (wa.Width - 300) / 2, wa.Bottom - 48 - 28);
+
+            endTime = DateTime.Now.AddSeconds(breakSeconds);
+            timer = new System.Windows.Forms.Timer();
+            timer.Interval = 1000;
+            timer.Tick += OnSecond;
+            timer.Start();
+        }
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams cp = base.CreateParams;
+                cp.ExStyle |= 0x20;          // WS_EX_TRANSPARENT: 鼠标点击穿透
+                cp.ExStyle |= 0x8000000;     // WS_EX_NOACTIVATE: 不抢焦点
+                return cp;
+            }
+        }
+
+        private void OnSecond(object sender, EventArgs e)
+        {
+            TimeSpan left = endTime - DateTime.Now;
+            if (left.TotalSeconds <= 0) { timer.Stop(); Close(); return; }
+            label.Text = string.Format("休息中 · 还剩 {0}:{1:D2}", left.Minutes, left.Seconds);
         }
     }
 
@@ -328,6 +424,7 @@ namespace BreakReminder
         private bool paused = false;
         private bool inBreak = false;
         private SettingsForm settingsForm;
+        private BreakOverlay overlay;
 
         public AppContext()
         {
@@ -559,12 +656,12 @@ namespace BreakReminder
                 DialogResult r = dlg.ShowDialog();
                 if (r == DialogResult.OK)
                 {
-                    Log.Write("开始休息 (用户确认或超时)");
+                    Log.Write("开始休息 (倒计时结束/用户确认)");
                     StartBreakLoop();
                 }
                 else
                 {
-                    Log.Write("用户跳过本次休息");
+                    Log.Write("用户选择: 本次跳过");
                     inBreak = false;
                     lastTick = DateTime.Now;
                     UpdateMenu();
@@ -574,6 +671,9 @@ namespace BreakReminder
 
         private void StartBreakLoop()
         {
+            try { if (overlay != null) overlay.Close(); } catch { }
+            overlay = new BreakOverlay(cfg.BreakSeconds);
+            overlay.Show();
             Thread t = new Thread(BreakLoop);
             t.IsBackground = true;
             t.Start();
@@ -630,6 +730,14 @@ namespace BreakReminder
         private void BreakDone(string msg)
         {
             Log.Write(msg);
+            try
+            {
+                BreakOverlay o = overlay;
+                overlay = null;
+                if (o != null && !o.IsDisposed)
+                    o.Invoke((MethodInvoker)delegate { o.Close(); });
+            }
+            catch { }
             try
             {
                 Control ui = (Control)tray.ContextMenuStrip;

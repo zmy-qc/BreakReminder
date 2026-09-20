@@ -48,15 +48,15 @@
   <a class="btn" href="./BreakReminder-macOS.zip" download>⬇︎ 下载 macOS 版</a>
   &nbsp;
   <a class="btn" href="./BreakReminder-Windows.zip" download>⬇︎ 下载 Windows 版</a>
-  <div class="meta">v1.0.1 · macOS 13+ / Windows 10+ · Apple Silicon / Intel 通用 · 纯本地运行，无遥测</div>
+  <div class="meta">v1.1.0 · macOS 13+ / Windows 10+ · Apple Silicon / Intel 通用 · 纯本地运行，无遥测</div>
 </div>
 <main>
   <div class="card">
     <h2>它做什么</h2>
     <div class="grid">
       <div class="feat"><b>⏱ 连续工作计时</b><span>按键鼠活动累计；离开超过 5 分钟视为已休息，回来重新计时</span></div>
-      <div class="feat"><b>🔔 一小时提醒</b><span>弹窗提示 + 提示音，30 秒无响应自动开始休息</span></div>
-      <div class="feat"><b>🌊 屏保休息五分钟</b><span>播放系统自带屏保动画；触碰键鼠立即结束，离开则满 5 分钟结束</span></div>
+      <div class="feat"><b>🔔 一小时提醒</b><span>居中弹窗大数字倒数 5 秒（可调），一键进入休息或本次跳过</span></div>
+      <div class="feat"><b>🌊 屏保休息五分钟</b><span>播放系统自带屏保动画，底部半透明浮层显示剩余时间；触碰键鼠立即结束</span></div>
       <div class="feat"><b>☕ 菜单栏/托盘常驻</b><span>随时看进度、立即休息、暂停监控、调整参数、开关开机自启</span></div>
     </div>
   </div>
@@ -69,7 +69,7 @@
     </ol>
     <p class="muted">若 macOS 提示「已损坏，无法打开」（新系统对未签名下载软件的限制），在终端执行后再打开：</p>
     <pre><code>xattr -cr /Applications/BreakReminder.app</code></pre>
-    <p class="muted">SHA-256 校验：<code class="sha">4bbb369b4c040df1145f2c845c99be1fe2d792b696b8ec857436dbb0a67b1638</code></p>
+    <p class="muted">SHA-256 校验：<code class="sha">87e6da2b55bd0e876ccbc079c954e495d91a319856955876605f35504d7ade49</code></p>
   </div>
   <div class="card">
     <h2>安装 — Windows（1 步）</h2>
@@ -79,11 +79,11 @@
       （Win10/11 自带 .NET Framework）。首次运行若被 SmartScreen 拦截：
       「更多信息 → 仍要运行」。右键托盘图标可开启开机自启。</li>
     </ol>
-    <p class="muted">SHA-256 校验：<code class="sha-win">9a3cc59e478597c5c1e21de478f1aa4028a60cd32641bb2b81d51b2cebccc490</code></p>
+    <p class="muted">SHA-256 校验：<code class="sha-win">c1c725dccc191f3b052a47a30e79780c2ffc8698ac7f4c96b4cc36160ba3c9eb</code></p>
   </div>
   <div class="card">
     <h2>休息的规则</h2>
-    <p class="muted">休息开始后播放系统屏保：期间<b>触碰键鼠，休息立即结束、恢复工作</b>（开始 3 秒为防误触宽限）；一直离开则满 5 分钟结束——Windows 版到点自动关闭屏保恢复桌面，macOS 版回来一碰键鼠即恢复。软件完全离线运行，不联网、不收集任何数据。</p>
+    <p class="muted">触发时居中弹出深色卡片，大数字倒数 5 秒（可调）后自动进入屏保，也可点「进入休息」或「本次跳过」。休息期间屏幕底部显示半透明倒计时浮层（点击完全穿透，不遮挡屏保画面）；期间<b>触碰键鼠，休息立即结束、恢复工作</b>（开始 3 秒为防误触宽限）；一直离开则满 5 分钟结束——Windows 版到点自动关闭屏保恢复桌面，macOS 版回来一碰键鼠即恢复。软件完全离线运行，不联网、不收集任何数据。</p>
   </div>
 </main>
 <footer>个人自用小工具 · 无遥测 · macOS 13+ / Windows 10+</footer>
