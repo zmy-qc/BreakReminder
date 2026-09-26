@@ -7,7 +7,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>BreakReminder</RootNamespace>
     <AssemblyName>BreakReminder</AssemblyName>
-    <Version>1.2.1</Version>
+    <Version>1.2.2</Version>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Deterministic>true</Deterministic>
   </PropertyGroup>

@@ -6,6 +6,7 @@
 //
 
 import AppKit
+import ApplicationServices
 import CoreGraphics
 import UserNotifications
 import ServiceManagement
@@ -115,6 +116,17 @@ func systemIdleSeconds() -> Double {
     // kCGAnyInputEventType(~0): 距最近一次任意键鼠事件的秒数
     guard let anyEvent = CGEventType(rawValue: ~0) else { return 0 }
     return CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: anyEvent)
+}
+
+/// 用合成鼠标移动事件遣散系统屏保 (macOS 26 会话屏保无法编程关闭, 只能被输入关掉;
+/// 需「辅助功能」权限, 未授权时返回 false)
+func tryDismissScreensaver() -> Bool {
+    guard AXIsProcessTrusted() else { return false }
+    let pt = NSEvent.mouseLocation
+    guard let ev = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved,
+                           mouseCursorPosition: pt, mouseButton: .left) else { return false }
+    ev.post(tap: .cghidEventTap)
+    return true
 }
 
 let screensaverBundleCandidates = [
@@ -602,6 +614,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var inBreak = false
     private var breakOverlay: BreakOverlayPanel?
     private var restScreen: RestScreenController?
+    private var breakUsedSystemSaver = false
+    private var a11yPrompted = false
     private var activityToken: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -788,6 +802,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 弹出居中倒计时确认卡 (自动触发与"立即休息"共用)
     private func presentBreakDialog() {
         if config.sound { NSSound(named: "Glass")?.play() }
+        // 一次性引导授权辅助功能: 授权后休息到点可自动遣散屏保恢复桌面
+        if !a11yPrompted && !AXIsProcessTrusted() {
+            a11yPrompted = true
+            let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+            AXIsProcessTrustedWithOptions(opts)
+            log("提示: 授权「辅助功能」后, 休息结束可自动关闭屏保恢复桌面")
+        }
         NSApp.activate(ignoringOtherApps: true)
         let panel = BreakCountdownPanel(timeout: config.dialogTimeout,
                                         breakMinutes: config.breakSeconds / 60)
@@ -821,6 +842,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             BreakNotifier.shared.begin(breakSeconds: config.breakSeconds)
         }
         let cfg = config
+        breakUsedSystemSaver = !builtin
         Thread.detachNewThread {
             let breakStart = Date()
             let grace: Double = 3   // 宽限期: 忽略点"进入休息"后手还没离开鼠标的余动
@@ -838,7 +860,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             if earlyExit { log("检测到键鼠活动, 提前结束休息") }
-            DispatchQueue.main.async { self.breakEnded() }
+            DispatchQueue.main.async { self.breakEnded(earlyExit: earlyExit) }
         }
     }
 
@@ -846,7 +868,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.bool(forKey: "builtinRestScreen")
     }
 
-    private func breakEnded() {
+    private func breakEnded(earlyExit: Bool) {
         BreakNotifier.shared.cancel()
         restScreen?.close()
         restScreen = nil
@@ -855,7 +877,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         inBreak = false
         accumulated = 0
         lastTick = Date()
-        log("休息结束, 已恢复正常")
+        if !earlyExit && breakUsedSystemSaver {
+            // 到点结束且人在座: 用合成输入遣散屏保, 桌面立即恢复 (需辅助功能权限)
+            if tryDismissScreensaver() {
+                log("休息结束, 已恢复正常 (屏保已自动关闭)")
+            } else {
+                log("休息结束 (屏保将在你触碰键鼠时消失; 授权辅助功能后可自动恢复桌面)")
+            }
+        } else {
+            log("休息结束, 已恢复正常")
+        }
         updateMenu()
     }
 }
